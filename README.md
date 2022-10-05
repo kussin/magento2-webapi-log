@@ -22,13 +22,13 @@ Read for more details: https://stackoverflow.com/a/13500676
 ```
 {
     "repositories": [
-        "kussin_oxidcaotchamodule": {
+        "kussin_magento2-webapi-log": {
             "type": "vcs",
-            "url": "https://github.com/kussin/oxid-captcha-module.git"
+            "url": "https://github.com/kussin/magento2-webapi-log.git"
         }
     ],
     "require": {
-        "oxid-projects/captcha-module": "dev-master"
+        "vladflonta/magento2-webapi-log": "dev-stage"
     }
 }
 ```
