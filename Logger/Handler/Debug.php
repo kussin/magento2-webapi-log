@@ -22,72 +22,83 @@ class Debug extends \Magento\Framework\Logger\Handler\Debug
      */
     public function write(array $record)
     {
-        if (!isset($record['context']['is_api']) || !$record['context']['is_api']) {
-            parent::write($record);
-            return;
-        }
-        $result = preg_match('/\/V1\/([^?]*)/', $record['context']['request']['uri'], $matches);
-        $url = sprintf(
-            '%s/var/log/webapi_%s/%s/%s.log',
-            BP,
-            'rest',
-            $result && count($matches) && $matches[1] ? trim($matches[1], '/') : 'default',
-            $record['datetime']->format('Ymd_His')
-        );
+        $bEnabled = \Magento\Framework\App\ObjectManager::getInstance()
+            ->get(\Magento\Framework\App\Config\ScopeConfigInterface::class)
+            ->getValue(
+                'rest_api/debug/enabled',
+                \Magento\Store\Model\ScopeInterface::SCOPE_WEBSITES
+            );
 
-        $logDir = $this->filesystem->getParentDirectory($url);
-        if (!$this->filesystem->isDirectory($logDir)) {
-            $this->filesystem->createDirectory($logDir);
-        }
+        if ($bEnabled) {
 
-        $stream = null;
-
-        if (!is_resource($stream)) {
-            if (!$url) {
-                throw new \LogicException('Missing stream url, the stream can not be opened.');
+            if (!isset($record['context']['is_api']) || !$record['context']['is_api']) {
+                parent::write($record);
+                return;
             }
-            $this->createDir($url);
-            $this->errorMessage = null;
-            set_error_handler(array($this, 'customErrorHandler'));
-            $stream = fopen($url, 'a');
-            if ($this->filePermission !== null) {
-                @chmod($url, $this->filePermission);
+            $result = preg_match('/\/V1\/([^?]*)/', $record['context']['request']['uri'], $matches);
+            $url = sprintf(
+                '%s/var/log/webapi_%s/%s/%s.log',
+                BP,
+                'rest',
+                $result && count($matches) && $matches[1] ? trim($matches[1], '/') : 'default',
+                $record['datetime']->format('Ymd_His')
+            );
+
+            $logDir = $this->filesystem->getParentDirectory($url);
+            if (!$this->filesystem->isDirectory($logDir)) {
+                $this->filesystem->createDirectory($logDir);
             }
-            restore_error_handler();
+
+            $stream = null;
+
             if (!is_resource($stream)) {
-                $stream = null;
-                throw new \Magento\Framework\Exception\LocalizedException(
-                    __('The stream or file "%1" could not be opened: %2', $url, $this->errorMessage)
-                );
+                if (!$url) {
+                    throw new \LogicException('Missing stream url, the stream can not be opened.');
+                }
+                $this->createDir($url);
+                $this->errorMessage = null;
+                set_error_handler(array($this, 'customErrorHandler'));
+                $stream = fopen($url, 'a');
+                if ($this->filePermission !== null) {
+                    @chmod($url, $this->filePermission);
+                }
+                restore_error_handler();
+                if (!is_resource($stream)) {
+                    $stream = null;
+                    throw new \Magento\Framework\Exception\LocalizedException(
+                        __('The stream or file "%1" could not be opened: %2', $url, $this->errorMessage)
+                    );
+                }
             }
-        }
 
-        if ($this->useLocking) {
-            flock($stream, LOCK_EX);
-        }
+            if ($this->useLocking) {
+                flock($stream, LOCK_EX);
+            }
 
-        $request = $record['context']['request'];
-        $data = '';
-        $data .= sprintf("%s %s HTTP %s\n\n", $request['method'], $request['uri'], $request['version']);
-        foreach ($record['context']['request']['headers'] as $key => $value) {
-            $data .= sprintf("%s: %s\n", $key, $value);
-        }
-        $data .= sprintf("\n%s\n\n", $request['body']);
-        foreach ($record['context']['response']['headers'] as $key => $value) {
-            $data .= sprintf("%s: %s\n", $key, $value);
-        }
-        $data .= sprintf("\n%s\n", $record['context']['response']['body']);
+            $request = $record['context']['request'];
+            $data = '';
+            $data .= sprintf("%s %s HTTP %s\n\n", $request['method'], $request['uri'], $request['version']);
+            foreach ($record['context']['request']['headers'] as $key => $value) {
+                $data .= sprintf("%s: %s\n", $key, $value);
+            }
+            $data .= sprintf("\n%s\n\n", $request['body']);
+            foreach ($record['context']['response']['headers'] as $key => $value) {
+                $data .= sprintf("%s: %s\n", $key, $value);
+            }
+            $data .= sprintf("\n%s\n", $record['context']['response']['body']);
 
-        fwrite($stream, $data);
+            fwrite($stream, $data);
 
-        if ($this->useLocking) {
-            flock($stream, LOCK_UN);
-        }
+            if ($this->useLocking) {
+                flock($stream, LOCK_UN);
+            }
 
-        if (is_resource($stream)) {
-            fclose($stream);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+            $stream = null;
+
         }
-        $stream = null;
     }
 
     /**
